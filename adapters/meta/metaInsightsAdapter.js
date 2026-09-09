@@ -101,27 +101,35 @@ const PostMapper = {
  * Check Meta Graph API credentials availability
  * @returns {Object} { canAccess: boolean, reason: string }
  */
+/**
+ * Check Meta Graph API credentials availability via AME bridge
+ * @returns {Object} { canAccess: boolean, reason: string, bridge: Object }
+ */
 function checkCredentials() {
-  // In this environment, cannot access GAS PropertiesService
-  // The credentials are stored in: Google Apps Script PropertiesService
-  // To actually check, would need clasp access or GAS execution
+  // Try to use the MetaPerformanceBridge if available
+  // The bridge connects to AME's post_performance_insights via
+  // server-side Supabase/Postgres credentials (never exposed to Node/GitHub/chats)
+  try {
+    const bridge = require ? require('./metaPerformanceBridge') : window.MetaPerformanceBridge;
+    if (bridge && bridge.fetchPostPerformance) {
+      // Bridge is available — credentials are configured internally in GAS
+      return {
+        canAccess: true,
+        reason: 'MetaPerformanceBridge available — credentials managed internally in GAS',
+        bridge: bridge,
+      };
+    }
+  } catch (e) {
+    // Bridge not available in this environment — expected
+  }
 
-  // For now: assume unavailable in this standalone Node environment
-  // The real adapter would check: PropertiesService.getScriptProperties().getProperty('META_PAGE_ACCESS_TOKEN')
+  // Fallback: cannot access GAS PropertiesService from standalone Node
   return {
     canAccess: false,
-    reason: 'Cannot access GAS PropertiesService from Node environment — would require clasp or GAS execution',
+    reason: 'Cannot access GAS PropertiesService from Node environment — would require GAS execution with valid access_token',
+    bridge: null,
   };
 }
-
-/**
- * Fetch Instagram media insights from Meta Graph API
- * READ-ONLY. Never calls publishing endpoints.
- * @param {Object} options - Fetch options
- * @param {string} options.media_id - Meta media ID / Instagram post ID
- * @param {string} options.access_token - Meta Page Access Token (optional, checked if available)
- * @returns {Object} { status: 'LIVE'|'MOCK'|'UNAVAILABLE'|'ERROR', data: Object, retrievedAt: string }
- */
 function fetchInstagramInsights(options = {}) {
   const { media_id, access_token } = options;
 
